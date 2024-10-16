@@ -1,14 +1,45 @@
-import numpy as np
-import cv2
-import screeninfo
+import os
 import time
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
-def load_and_resize_image(image_path):
+import cv2
+import numpy as np
+import screeninfo
+
+config = {
+    'screen_id': 1,  # ID of the screen to use
+    'folder_path': 'C:/Users/Markus/privat/testbilder',  # Path to the folder containing images
+    'display_duration': 2  # Time to display each image in seconds
+}
+
+class FileSystemImageWatcher(FileSystemEventHandler):
+    """
+    Handles file system events in the watched folder.
+    """
+    def __init__(self, image_queue):
+        self.image_queue = image_queue
+
+    def on_any_event(self, event):
+        if event.is_directory:
+            return
+        if event.event_type == 'deleted':
+            if event.src_path in self.image_queue:
+                self.image_queue.remove(event.src_path)
+        if event.event_type == 'created' and event.src_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+            if event.src_path not in self.image_queue:
+                self.image_queue.append(event.src_path)
+
+        self.image_queue.sort(key=os.path.getctime)
+
+
+def load_and_resize_image(image_path, screen_id):
     """
     Loads an image from the given path and resizes it to fit the screen while maintaining aspect ratio.
 
     Args:
         image_path (str): The path to the image file.
+        screen_id (int): The ID of the screen to use.
 
     Returns:
         numpy.ndarray: The resized image.
@@ -18,7 +49,6 @@ def load_and_resize_image(image_path):
     if image is None:
         raise ValueError(f"Image at path {image_path} could not be loaded.")
 
-    screen_id = 1
     screen = screeninfo.get_monitors()[screen_id]
     screen_width, screen_height = screen.width, screen.height
 
@@ -36,13 +66,13 @@ def load_and_resize_image(image_path):
     resized_image = cv2.resize(image, (new_width, new_height))
     return resized_image
 
-def display_fullscreen_image(image, screen_id=1):
+def display_fullscreen_image(image, screen_id):
     """
     Displays the given image in fullscreen mode on the specified screen.
 
     Args:
         image (numpy.ndarray): The image to display.
-        screen_id (int, optional): The ID of the screen to display the image on. Defaults to 0.
+        screen_id (int): The ID of the screen to use.
     """
     screen = screeninfo.get_monitors()[screen_id]
     screen_width, screen_height = screen.width, screen.height
@@ -57,16 +87,32 @@ def display_fullscreen_image(image, screen_id=1):
     cv2.moveWindow(window_name, screen.x - 1, screen.y - 1)
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.imshow(window_name, padded_image)
-    cv2.waitKey(1)  # Display the image for a short time to update the window
+    cv2.waitKey(1)  # Add this line back, but with a short delay
 
 if __name__ == '__main__':
-    image_paths = [
-        'C:/Users/Markus/privat/testbilder/WIN_20241015_16_09_56_Pro.jpg',
-        'C:/Users/Markus/privat/testbilder/WIN_20241016_23_47_36_Pro.jpg'
-    ]
+    image_queue = []
+    # Add initial files to the queue
+    for filename in os.listdir(config['folder_path']):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            image_queue.append(os.path.join(config['folder_path'], filename))
+    image_queue.sort(key=os.path.getctime)
 
-    while True:
-        for image_path in image_paths:
-            resized_image = load_and_resize_image(image_path)
-            display_fullscreen_image(resized_image)
-            time.sleep(3)
+    event_handler = FileSystemImageWatcher(image_queue)
+    observer = Observer()
+    observer.schedule(event_handler, config['folder_path'], recursive=False)
+    observer.start()
+
+
+    current_image_index = 0
+
+    try:
+        while True:
+            image_path = image_queue[current_image_index]
+            resized_image = load_and_resize_image(image_path, config['screen_id'])
+            display_fullscreen_image(resized_image, config['screen_id'])
+            time.sleep(config['display_duration'])
+            current_image_index = (current_image_index + 1) % len(image_queue)
+
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
