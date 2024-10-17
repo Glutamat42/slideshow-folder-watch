@@ -100,7 +100,7 @@ def display_fullscreen_image(image, screen_id, paused=False):
     cv2.moveWindow(window_name, screen.x - 1, screen.y - 1)
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.imshow(window_name, padded_image)
-    cv2.waitKey(1)  # Add this line back, but with a short delay
+    cv2.waitKey(5)  # Add this line back, but with a short delay
 
 if __name__ == '__main__':
     image_queue = []
@@ -122,13 +122,22 @@ if __name__ == '__main__':
     try:
         while True:
             # Key press check (moved to the beginning of the loop)
-            key = cv2.waitKey(1)
+            key = cv2.waitKeyEx(5)
+            user_image_change = False
             if key == ord(' '):
                 paused = not paused
                 iteration_count = 0  # Reset counter when pausing/resuming
             elif key == 27 or key == ord('q'):
                 cv2.destroyAllWindows()
                 exit()
+            elif key == 2424832:  # Left arrow key
+                current_image_index = (current_image_index - 1) % len(image_queue)
+                iteration_count = 0  # Reset counter to immediately display the image
+                user_image_change = True
+            elif key == 2555904:  # Right arrow key
+                current_image_index = (current_image_index + 1) % len(image_queue)
+                iteration_count = 0  # Reset counter to immediately display the image
+                user_image_change = True
 
             if paused:
                 display_fullscreen_image(resized_image, config['screen_id'], paused=True)
@@ -137,7 +146,8 @@ if __name__ == '__main__':
                     image_path = image_queue[current_image_index]
                     resized_image = load_and_resize_image(image_path, config['screen_id'])
                     display_fullscreen_image(resized_image, config['screen_id'])
-                    current_image_index = (current_image_index + 1) % len(image_queue)
+                    if not user_image_change:
+                        current_image_index = (current_image_index + 1) % len(image_queue)
 
                 iteration_count += 1
                 if iteration_count >= config['display_duration'] * 10:
