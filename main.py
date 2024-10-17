@@ -102,6 +102,38 @@ def display_fullscreen_image(image, screen_id, paused=False):
     cv2.imshow(window_name, padded_image)
     cv2.waitKey(5)  # Add this line back, but with a short delay
 
+def handle_user_input(current_image_index, paused, iteration_count):
+    """
+    Handles user input for pausing, quitting, and navigating images.
+
+    Args:
+        current_image_index (int): The index of the current image.
+        paused (bool): Whether the slideshow is paused.
+        iteration_count (int): The current iteration count.
+
+    Returns:
+        tuple: Updated values for current_image_index, paused, iteration_count, and user_image_change.
+    """
+    key = cv2.waitKeyEx(5)
+    user_image_change = False  # Initialize the flag here
+    if key == ord(' '):
+        paused = not paused
+        iteration_count = 0
+    elif key == 27 or key == ord('q'):
+        cv2.destroyAllWindows()
+        exit()
+    elif key == 2424832:  # Left arrow key
+        current_image_index = (current_image_index - 1) % len(image_queue)
+        iteration_count = 0
+        user_image_change = True
+    elif key == 2555904:  # Right arrow key
+        current_image_index = (current_image_index + 1) % len(image_queue)
+        iteration_count = 0
+        user_image_change = True
+
+    return current_image_index, paused, iteration_count, user_image_change  # Return the flag
+
+
 if __name__ == '__main__':
     image_queue = []
     # Add initial files to the queue
@@ -121,31 +153,19 @@ if __name__ == '__main__':
 
     try:
         while True:
-            # Key press check (moved to the beginning of the loop)
-            key = cv2.waitKeyEx(5)
-            user_image_change = False
-            if key == ord(' '):
-                paused = not paused
-                iteration_count = 0  # Reset counter when pausing/resuming
-            elif key == 27 or key == ord('q'):
-                cv2.destroyAllWindows()
-                exit()
-            elif key == 2424832:  # Left arrow key
-                current_image_index = (current_image_index - 1) % len(image_queue)
-                iteration_count = 0  # Reset counter to immediately display the image
-                user_image_change = True
-            elif key == 2555904:  # Right arrow key
-                current_image_index = (current_image_index + 1) % len(image_queue)
-                iteration_count = 0  # Reset counter to immediately display the image
-                user_image_change = True
+            # Handle key presses and image switching
+            current_image_index, paused, iteration_count, user_image_change = handle_user_input(
+                current_image_index, paused, iteration_count
+            )
 
             if paused:
                 display_fullscreen_image(resized_image, config['screen_id'], paused=True)
             else:
-                if iteration_count == 0:  # Load and display image immediately when not paused
+                if iteration_count == 0:
                     image_path = image_queue[current_image_index]
                     resized_image = load_and_resize_image(image_path, config['screen_id'])
                     display_fullscreen_image(resized_image, config['screen_id'])
+                    # Only automatically advance if the user didn't manually change the image
                     if not user_image_change:
                         current_image_index = (current_image_index + 1) % len(image_queue)
 
