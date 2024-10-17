@@ -66,13 +66,15 @@ def load_and_resize_image(image_path, screen_id):
     resized_image = cv2.resize(image, (new_width, new_height))
     return resized_image
 
-def display_fullscreen_image(image, screen_id):
+def display_fullscreen_image(image, screen_id, paused=False):
     """
     Displays the given image in fullscreen mode on the specified screen.
+    Optionally displays a pause symbol if paused is True.
 
     Args:
         image (numpy.ndarray): The image to display.
         screen_id (int): The ID of the screen to use.
+        paused (bool, optional): Whether to display the pause symbol. Defaults to False.
     """
     screen = screeninfo.get_monitors()[screen_id]
     screen_width, screen_height = screen.width, screen.height
@@ -81,6 +83,17 @@ def display_fullscreen_image(image, screen_id):
     y_offset = (screen_height - image.shape[0]) // 2
     x_offset = (screen_width - image.shape[1]) // 2
     padded_image[y_offset:y_offset + image.shape[0], x_offset:x_offset + image.shape[1]] = image
+
+    if paused:
+        # Draw a simple pause symbol (two vertical bars)
+        bar_width = 20
+        bar_height = 100
+        bar_spacing = 30
+        bar_x = 10
+        bar_y = 10
+        cv2.rectangle(padded_image, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), (255, 255, 255), -1)
+        cv2.rectangle(padded_image, (bar_x + bar_width + bar_spacing, bar_y),
+                      (bar_x + bar_width * 2 + bar_spacing, bar_y + bar_height), (255, 255, 255), -1)
 
     window_name = 'projector'
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
@@ -102,16 +115,35 @@ if __name__ == '__main__':
     observer.schedule(event_handler, config['folder_path'], recursive=False)
     observer.start()
 
-
     current_image_index = 0
+    paused = False
+    iteration_count = 0
 
     try:
         while True:
-            image_path = image_queue[current_image_index]
-            resized_image = load_and_resize_image(image_path, config['screen_id'])
-            display_fullscreen_image(resized_image, config['screen_id'])
-            time.sleep(config['display_duration'])
-            current_image_index = (current_image_index + 1) % len(image_queue)
+            # Key press check (moved to the beginning of the loop)
+            key = cv2.waitKey(1)
+            if key == ord(' '):
+                paused = not paused
+                iteration_count = 0  # Reset counter when pausing/resuming
+            elif key == 27 or key == ord('q'):
+                cv2.destroyAllWindows()
+                exit()
+
+            if paused:
+                display_fullscreen_image(resized_image, config['screen_id'], paused=True)
+            else:
+                if iteration_count == 0:  # Load and display image immediately when not paused
+                    image_path = image_queue[current_image_index]
+                    resized_image = load_and_resize_image(image_path, config['screen_id'])
+                    display_fullscreen_image(resized_image, config['screen_id'])
+                    current_image_index = (current_image_index + 1) % len(image_queue)
+
+                iteration_count += 1
+                if iteration_count >= config['display_duration'] * 10:
+                    iteration_count = 0
+
+            time.sleep(0.1)
 
     except KeyboardInterrupt:
         observer.stop()
