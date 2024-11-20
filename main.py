@@ -8,9 +8,11 @@ import numpy as np
 import screeninfo
 
 config = {
-    'screen_id': 1,  # ID of the screen to use
+    'screen_id': 0,  # ID of the screen to use
+    # 'folder_path': '/mnt/c/Users/Markus/privat/testbilder',  # Path to the folder containing images
     'folder_path': 'C:/Users/Markus/privat/testbilder',  # Path to the folder containing images
-    'display_duration': 2  # Time to display each image in seconds
+    'display_duration': 2,  # Time to display each image in seconds
+    'prompt_lines': 4  # Maximum number of lines for the prompt text
 }
 
 class FileSystemImageWatcher(FileSystemEventHandler):
@@ -32,6 +34,12 @@ class FileSystemImageWatcher(FileSystemEventHandler):
 
         self.image_queue.sort(key=os.path.getctime)
 
+def load_image_text(filename):
+    text_file_path = os.path.join(config['folder_path'], f"{filename}.txt")
+    if os.path.exists(text_file_path):
+        with open(text_file_path, 'r') as file:
+            return file.read().strip()
+    return ""
 
 def load_and_resize_image(image_path, screen_id):
     """
@@ -49,6 +57,8 @@ def load_and_resize_image(image_path, screen_id):
     if image is None:
         raise ValueError(f"Image at path {image_path} could not be loaded.")
 
+    image = add_prompt_text_to_image(image, image_path)
+
     screen = screeninfo.get_monitors()[screen_id]
     screen_width, screen_height = screen.width, screen.height
 
@@ -65,6 +75,54 @@ def load_and_resize_image(image_path, screen_id):
 
     resized_image = cv2.resize(image, (new_width, new_height))
     return resized_image
+
+
+def add_prompt_text_to_image(image, image_path):
+    filename = os.path.basename(image_path)
+    prompt_text = load_image_text(filename)
+    if prompt_text:
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 1
+        font_color = (255, 255, 255)
+        line_type = 2
+
+        words = prompt_text.split()
+        lines = []
+        current_line = ""
+
+        for word in words:
+            if len(current_line) + len(word) + 1 <= 63:
+                if current_line:
+                    current_line += " "
+                current_line += word
+            else:
+                lines.append(current_line)
+                current_line = word
+                if len(lines) == config['prompt_lines']:
+                    break
+
+        if current_line and len(lines) < config['prompt_lines']:
+            lines.append(current_line)
+
+        text_height = 0
+        for line in lines:
+            text_size, _ = cv2.getTextSize(line, font, font_scale, line_type)
+            text_height += text_size[1] + 10  # Add some padding between lines
+
+        # Increase the image size to accommodate the text
+        new_image = np.zeros((image.shape[0] + text_height + 20, image.shape[1], 3), dtype=np.uint8)
+        new_image[:image.shape[0], :image.shape[1]] = image
+
+        text_x = 10
+        text_y = image.shape[0] + 25  # Adjusted to lower the text
+        for line in lines:
+            cv2.putText(new_image, line, (text_x, text_y), font, font_scale, font_color, line_type)
+            text_size, _ = cv2.getTextSize(line, font, font_scale, line_type)
+            text_y += text_size[1] + 10  # Move to the next line
+
+        image = new_image
+    return image
+
 
 def display_fullscreen_image(image, screen_id, paused=False):
     """
